@@ -70,22 +70,22 @@ Author: Fischy6734
         const PLAYER_HEIGHT = 1.8;
         const PLAYER_RADIUS = 0.3;
         const GRAVITY = -5;         // Lighter gravity
-        const TERMINAL_VELOCITY = -10; // Maximum fall speed
+        const TERMINAL_VELOCITY = -15; // Maximum fall speed
         const JUMP_FORCE = 1;      // Balanced jump height
         const WALK_SPEED = 5;
         const SPRINT_SPEED = 8;
         const FRICTION = 0.6;
-        const AIR_RESISTANCE = 0.98;
+        const AIR_RESISTANCE = 1;
         const WORLD_SIZE = 32;
         const CHUNK_SIZE = 5;
 
         // --- CHUNK CONFIG ---
         const INITIAL_CHUNKS = 2;  // Start with 2 chunks
         const CHUNK_LOAD_DISTANCE = 2;
-        const TREE_CHANCE = 0.05;   // 5% chance for better performance
+        const TREE_CHANCE = 0.04;   // 5% chance for better performance
         const TREE_MIN_HEIGHT = 4;
         const TREE_MAX_HEIGHT = 6;
-        const TREE_SPACING = 4;    // Increased spacing between trees
+        const TREE_SPACING = 6;    // Increased spacing between trees
 
         // Game state
         let scene, camera, renderer, controls, raycaster;
