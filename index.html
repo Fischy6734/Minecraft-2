@@ -1,56 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <!--
-Date: 2025-05-28 18:48:29
+Date: 2025-05-29 14:58:24
 Author: Fischy6734
 -->
 <head>
     <meta charset="UTF-8">
-    <title>Minecraft Clone - Working Trees</title>
+    <title>Minecraft Clone - Herobrine Update</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background: #000;
-        }
+        body { margin: 0; overflow: hidden; background: #000; }
         #crosshair {
             position: fixed;
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
-            width: 20px;
-            height: 20px;
-            pointer-events: none;
-            z-index: 100;
+            width: 20px; height: 20px;
+            pointer-events: none; z-index: 100;
         }
-        #crosshair::before,
-        #crosshair::after {
+        #crosshair::before, #crosshair::after {
             content: '';
             position: absolute;
             background: white;
             box-shadow: 0 0 2px black;
         }
-        #crosshair::before {
-            width: 2px;
-            height: 20px;
-            left: 9px;
-        }
-        #crosshair::after {
-            width: 20px;
-            height: 2px;
-            top: 9px;
-        }
+        #crosshair::before { width: 2px; height: 20px; left: 9px; }
+        #crosshair::after  { width: 20px; height: 2px; top: 9px; }
         #hud {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-family: monospace;
-            text-shadow: 2px 2px black;
-            z-index: 100;
+            position: fixed; top: 10px; left: 10px;
+            color: white; font-family: monospace;
+            text-shadow: 2px 2px black; z-index: 100;
             background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 5px;
+            padding: 10px; border-radius: 5px;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -63,31 +43,36 @@ Author: Fischy6734
         <div>Position: <span id="pos">0, 0, 0</span></div>
         <div>Chunks: <span id="chunks">0</span></div>
     </div>
-
     <script>
         // --- IMPROVED PHYSICS CONFIG ---
         const BLOCK_SIZE = 1;
         const PLAYER_HEIGHT = 1.8;
         const PLAYER_RADIUS = 0.3;
-        const GRAVITY = -5;         // Lighter gravity
-        const TERMINAL_VELOCITY = -15; // Maximum fall speed
-        const JUMP_FORCE = 1;      // Balanced jump height
+        const GRAVITY = -5;
+        const TERMINAL_VELOCITY = -15;
+        const JUMP_FORCE = 1;
         const WALK_SPEED = 5;
         const SPRINT_SPEED = 8;
         const FRICTION = 0.6;
         const AIR_RESISTANCE = 1;
         const WORLD_SIZE = 32;
-        const CHUNK_SIZE = 5;
+        const CHUNK_SIZE = 1;
 
         // --- CHUNK CONFIG ---
-        const INITIAL_CHUNKS = 2;  // Start with 2 chunks
+        const INITIAL_CHUNKS = 2;
         const CHUNK_LOAD_DISTANCE = 2;
-        const TREE_CHANCE = 0.04;   // 5% chance for better performance
+        const TREE_CHANCE = 0.04;
         const TREE_MIN_HEIGHT = 4;
         const TREE_MAX_HEIGHT = 6;
-        const TREE_SPACING = 6;    // Increased spacing between trees
+        const TREE_SPACING = 6;
 
-        // Game state
+        // --- HEROBRINE CONFIG ---
+        const HEROBRINE_SPAWN_CHANCE = 0.003; // 0.3% per chunk
+        const HEROBRINE_ACTION_INTERVAL = 7000; // ms
+        let herobrine = null;
+        let herobrineTimeout = null;
+
+        // --- GAME STATE ---
         let scene, camera, renderer, controls, raycaster;
         let velocity = new THREE.Vector3();
         let moveInput = { forward: 0, right: 0 };
@@ -95,26 +80,177 @@ Author: Fischy6734
         let blocks = new Set();
         let blockMap = new Set();
         let chunksLoaded = new Set();
-
-        // Tree tracking
         const treePositions = new Map();
 
+        // --- HEROBRINE CODE ---
+
+        // Herobrine Model (Steve with white eyes)
+        function createHerobrineMesh() {
+            const group = new THREE.Group();
+
+            // Body
+            const bodyGeo = new THREE.BoxGeometry(0.6, 1, 0.4);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x7851a9 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.set(0, 0.5, 0);
+            group.add(body);
+
+            // Head
+            const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xe1a16d });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(0, 1.1, 0);
+            group.add(head);
+
+            // Eyes
+            const eyeGeo = new THREE.BoxGeometry(0.12, 0.08, 0.01);
+            const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff });
+            const eyeLeft = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeLeft.position.set(-0.13, 1.15, 0.31);
+            const eyeRight = new THREE.Mesh(eyeGeo, eyeMat);
+            eyeRight.position.set(0.13, 1.15, 0.31);
+            group.add(eyeLeft); group.add(eyeRight);
+
+            // Arms
+            const armGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x3cba54 });
+            const armLeft = new THREE.Mesh(armGeo, armMat);
+            armLeft.position.set(-0.45, 0.7, 0);
+            const armRight = new THREE.Mesh(armGeo, armMat);
+            armRight.position.set(0.45, 0.7, 0);
+            group.add(armLeft); group.add(armRight);
+
+            // Legs
+            const legGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x2222ff });
+            const legLeft = new THREE.Mesh(legGeo, legMat);
+            legLeft.position.set(-0.18, 0.1, 0);
+            const legRight = new THREE.Mesh(legGeo, legMat);
+            legRight.position.set(0.18, 0.1, 0);
+            group.add(legLeft); group.add(legRight);
+
+            group.castShadow = true;
+            group.receiveShadow = true;
+            group.userData.isHerobrine = true;
+            return group;
+        }
+
+        function spawnHerobrine(validSpots) {
+            if (herobrine) return;
+            if (!validSpots.length) return;
+
+            // Pick a random valid spot
+            const idx = Math.floor(Math.random() * validSpots.length);
+            const { x, y, z } = validSpots[idx];
+
+            herobrine = createHerobrineMesh();
+            herobrine.position.set(x * BLOCK_SIZE, y * BLOCK_SIZE + 0.9, z * BLOCK_SIZE);
+            scene.add(herobrine);
+
+            hauntWorld();
+        }
+
+        // Find valid spawn spots (on ground, on tree, in sky)
+        function findHerobrineSpots(chunkX, chunkZ) {
+            const spots = [];
+            // On top of trees
+            for (let [key, tree] of treePositions) {
+                const [tx, tz] = key.split(',').map(Number);
+                if (Math.abs(tx - chunkX) < CHUNK_SIZE*2 && Math.abs(tz - chunkZ) < CHUNK_SIZE*2) {
+                    spots.push({ x: tx, y: tree.height + 2, z: tz });
+                }
+            }
+            // In sky above random block in chunk
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+                for (let z = 0; z < CHUNK_SIZE; z++) {
+                    spots.push({ x: chunkX * CHUNK_SIZE + x, y: 14 + Math.floor(Math.random()*10), z: chunkZ * CHUNK_SIZE + z });
+                }
+            }
+            // On the ground
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+                for (let z = 0; z < CHUNK_SIZE; z++) {
+                    let wx = chunkX * CHUNK_SIZE + x;
+                    let wz = chunkZ * CHUNK_SIZE + z;
+                    let y = Math.floor(5 + noise.noise(wx * 0.08, wz * 0.08) * 3);
+                    spots.push({ x: wx, y, z: wz });
+                }
+            }
+            return spots;
+        }
+
+        // Herobrine haunting actions
+        function hauntWorld() {
+            if (!herobrine) return;
+            const action = Math.random();
+            if (action < 0.33) {
+                // Dig a cave
+                const pos = herobrine.position;
+                for (let i = 0; i < 7; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        for (let k = 0; k < 7; k++) {
+                            let bx = Math.round(pos.x/BLOCK_SIZE) + i-3;
+                            let by = Math.round(pos.y/BLOCK_SIZE) - j-3;
+                            let bz = Math.round(pos.z/BLOCK_SIZE) + k-3;
+                            if (by > 0 && Math.random() < 0.6) {
+                                removeBlockFromMap(bx, by, bz);
+                                for (let block of blocks) {
+                                    if (
+                                        Math.round(block.position.x/BLOCK_SIZE) === bx &&
+                                        Math.round(block.position.y/BLOCK_SIZE) === by &&
+                                        Math.round(block.position.z/BLOCK_SIZE) === bz
+                                    ) {
+                                        scene.remove(block);
+                                        blocks.delete(block);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (action < 0.66) {
+                // Remove leaves from nearby trees
+                for (let block of blocks) {
+                    if (block.material.color.getHex() === 0x2d5a27) {
+                        if (herobrine.position.distanceTo(block.position) < 6 && Math.random() < 0.5) {
+                            let x = Math.round(block.position.x/BLOCK_SIZE);
+                            let y = Math.round(block.position.y/BLOCK_SIZE);
+                            let z = Math.round(block.position.z/BLOCK_SIZE);
+                            removeBlockFromMap(x, y, z);
+                            scene.remove(block);
+                            blocks.delete(block);
+                        }
+                    }
+                }
+            } else {
+                // Change color of some blocks nearby
+                for (let block of blocks) {
+                    if (herobrine.position.distanceTo(block.position) < 6 && Math.random() < 0.2) {
+                        block.material.color.setHex(Math.random() * 0xffffff);
+                    }
+                }
+            }
+            // Occasionally teleport Herobrine
+            if (Math.random() < 0.3) {
+                herobrine.position.x += (Math.random()-0.5)*16;
+                herobrine.position.z += (Math.random()-0.5)*16;
+                herobrine.position.y += (Math.random()-0.5)*8;
+            }
+            // Repeat
+            herobrineTimeout = setTimeout(hauntWorld, HEROBRINE_ACTION_INTERVAL);
+        }
+
+        // --- TREE GENERATION ---
         function generateTree(x, y, z, chunk) {
             const height = Math.floor(Math.random() * (TREE_MAX_HEIGHT - TREE_MIN_HEIGHT + 1)) + TREE_MIN_HEIGHT;
             const treeBlocks = new Set();
-            
-            // Generate trunk
             for(let i = 0; i < height; i++) {
                 const block = createBlock(x * BLOCK_SIZE, (y + i) * BLOCK_SIZE, z * BLOCK_SIZE, 0x8B4513);
                 chunk.blocks.add(block);
                 treeBlocks.add(block);
                 addBlockToMap(x, y + i, z);
             }
-
-            // Generate leaves
             const leafHeight = Math.min(3, Math.floor(height * 0.6));
             const leafStart = height - leafHeight;
-            
             for(let ly = 0; ly < leafHeight; ly++) {
                 const radius = ly === 0 ? 2 : 1;
                 for(let lx = -radius; lx <= radius; lx++) {
@@ -124,7 +260,7 @@ Author: Fischy6734
                                 (x + lx) * BLOCK_SIZE, 
                                 (y + leafStart + ly) * BLOCK_SIZE, 
                                 (z + lz) * BLOCK_SIZE, 
-                                0x2d5a27  // Dark green for leaves
+                                0x2d5a27
                             );
                             chunk.blocks.add(block);
                             treeBlocks.add(block);
@@ -133,26 +269,14 @@ Author: Fischy6734
                     }
                 }
             }
-
-            // Track tree position
-            treePositions.set(`${x},${z}`, {
-                height: height,
-                blocks: treeBlocks
-            });
-
+            treePositions.set(`${x},${z}`, {height, blocks: treeBlocks});
             return true;
         }
-
         function canPlaceTree(x, y, z, chunk) {
-            // Check ground block exists
             if (!blockAt(x, y - 1, z)) return false;
-
-            // Check space above
             for (let i = 0; i < TREE_MAX_HEIGHT + 2; i++) {
                 if (blockAt(x, y + i, z)) return false;
             }
-
-            // Check spacing between trees
             const spacing = Math.floor(TREE_SPACING / 2);
             for(let dx = -spacing; dx <= spacing; dx++) {
                 for(let dz = -spacing; dz <= spacing; dz++) {
@@ -161,7 +285,6 @@ Author: Fischy6734
                     }
                 }
             }
-
             return true;
         }
 
@@ -174,69 +297,56 @@ Author: Fischy6734
                 this.mesh = null;
                 this.generated = false;
             }
-
             generate() {
                 if (this.generated) return;
-                
                 const wx = this.x * CHUNK_SIZE;
                 const wz = this.z * CHUNK_SIZE;
-
-                // First pass: Generate terrain
                 for (let x = 0; x < CHUNK_SIZE; x++) {
                     for (let z = 0; z < CHUNK_SIZE; z++) {
                         const ax = wx + x;
                         const az = wz + z;
                         const height = this.getHeight(ax, az);
-
                         for (let y = 0; y < height; y++) {
-                            let color = 0x8B4513; // Dirt color
-                            if (y === height - 1) color = 0x3cba54; // Grass color
-                            else if (y < height - 4) color = 0x808080; // Stone color
-                            
+                            let color = 0x8B4513;
+                            if (y === height - 1) color = 0x3cba54;
+                            else if (y < height - 4) color = 0x808080;
                             this.addBlock(ax, y, az, color);
                         }
                     }
                 }
-
-                // Second pass: Generate trees with delay to prevent freezing
                 setTimeout(() => {
                     for (let x = 0; x < CHUNK_SIZE; x++) {
                         for (let z = 0; z < CHUNK_SIZE; z++) {
                             const ax = wx + x;
                             const az = wz + z;
                             const height = this.getHeight(ax, az);
-
                             if (Math.random() < TREE_CHANCE && canPlaceTree(ax, height, az, this)) {
                                 generateTree(ax, height, az, this);
                             }
                         }
                     }
+                    // --- HEROBRINE: Try to spawn when chunk is generated ---
+                    if (Math.random() < HEROBRINE_SPAWN_CHANCE && !herobrine) {
+                        const spots = findHerobrineSpots(this.x, this.z);
+                        spawnHerobrine(spots);
+                    }
                 }, 100);
-                
                 this.generated = true;
             }
-
             getHeight(x, z) {
-                return Math.floor(
-                    5 + 
-                    noise.noise(x * 0.08, z * 0.08) * 3
-                );
+                return Math.floor(5 + noise.noise(x * 0.08, z * 0.08) * 3);
             }
-
             addBlock(x, y, z, color) {
                 const block = createBlock(x * BLOCK_SIZE, y * BLOCK_SIZE, z * BLOCK_SIZE, color);
                 this.blocks.add(block);
                 addBlockToMap(x, y, z);
             }
-
             remove() {
-                // Remove tree tracking for this chunk
                 for (let block of this.blocks) {
                     const x = Math.round(block.position.x/BLOCK_SIZE);
                     const z = Math.round(block.position.z/BLOCK_SIZE);
                     treePositions.delete(`${x},${z}`);
                 }
-
                 this.blocks.forEach(block => {
                     scene.remove(block);
                     blocks.delete(block);
@@ -250,7 +360,6 @@ Author: Fischy6734
                 this.generated = false;
             }
         }
-
         const chunks = new Map();
 
         function generateInitialChunks() {
@@ -263,18 +372,14 @@ Author: Fischy6734
                 }
             }
         }
-
         function updateChunks() {
             const playerChunkX = Math.floor(camera.position.x / (CHUNK_SIZE * BLOCK_SIZE));
             const playerChunkZ = Math.floor(camera.position.z / (CHUNK_SIZE * BLOCK_SIZE));
-
-            // Check surrounding chunks
             for (let dx = -CHUNK_LOAD_DISTANCE; dx <= CHUNK_LOAD_DISTANCE; dx++) {
                 for (let dz = -CHUNK_LOAD_DISTANCE; dz <= CHUNK_LOAD_DISTANCE; dz++) {
                     const chunkX = playerChunkX + dx;
                     const chunkZ = playerChunkZ + dz;
                     const key = `${chunkX},${chunkZ}`;
-
                     const distance = Math.sqrt(dx * dx + dz * dz);
                     if (distance <= CHUNK_LOAD_DISTANCE && !chunks.has(key)) {
                         const chunk = new Chunk(chunkX, chunkZ);
@@ -283,23 +388,20 @@ Author: Fischy6734
                     }
                 }
             }
-
-            // Unload distant chunks
             for (const [key, chunk] of chunks) {
                 const [x, z] = key.split(',').map(Number);
                 const dx = x - playerChunkX;
                 const dz = z - playerChunkZ;
                 const distance = Math.sqrt(dx * dx + dz * dz);
-                
                 if (distance > CHUNK_LOAD_DISTANCE + 1) {
                     chunk.remove();
                     chunks.delete(key);
                 }
             }
-
             document.getElementById('chunks').textContent = chunks.size;
         }
 
+        // --- NOISE ---
         class SimplexNoise {
             constructor() {
                 this.grad3 = [
@@ -308,19 +410,11 @@ Author: Fischy6734
                     [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]
                 ];
                 this.p = [];
-                for (let i=0; i<256; i++) {
-                    this.p[i] = Math.floor(Math.random()*256);
-                }
+                for (let i=0; i<256; i++) { this.p[i] = Math.floor(Math.random()*256); }
                 this.perm = [];
-                for(let i=0; i<512; i++) {
-                    this.perm[i]=this.p[i & 255];
-                }
+                for(let i=0; i<512; i++) { this.perm[i]=this.p[i & 255]; }
             }
-
-            dot(g, x, y) {
-                return g[0]*x + g[1]*y;
-            }
-
+            dot(g, x, y) { return g[0]*x + g[1]*y; }
             noise(xin, yin) {
                 let n0, n1, n2;
                 const F2 = 0.5*(Math.sqrt(3.0)-1.0);
@@ -371,18 +465,9 @@ Author: Fischy6734
         function blockKey(x, y, z) {
             return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`;
         }
-
-        function addBlockToMap(x, y, z) {
-            blockMap.add(blockKey(x, y, z));
-        }
-
-        function removeBlockFromMap(x, y, z) {
-            blockMap.delete(blockKey(x, y, z));
-        }
-
-        function blockAt(x, y, z) {
-            return blockMap.has(blockKey(x, y, z));
-        }
+        function addBlockToMap(x, y, z) { blockMap.add(blockKey(x, y, z)); }
+        function removeBlockFromMap(x, y, z) { blockMap.delete(blockKey(x, y, z)); }
+        function blockAt(x, y, z) { return blockMap.has(blockKey(x, y, z)); }
 
         function isColliding(px, py, pz) {
             let y0 = py - PLAYER_HEIGHT + 0.001;
@@ -395,41 +480,27 @@ Author: Fischy6734
             }
             return false;
         }
-
         function collideAndMove(pos, next) {
             let newY = next.y;
             if (isColliding(pos.x, newY, pos.z)) {
-                if (next.y > pos.y) {
-                    while (isColliding(pos.x, newY, pos.z)) newY -= 0.01;
-                } else {
-                    while (isColliding(pos.x, newY, pos.z)) newY += 0.01;
-                }
+                if (next.y > pos.y) { while (isColliding(pos.x, newY, pos.z)) newY -= 0.01; }
+                else { while (isColliding(pos.x, newY, pos.z)) newY += 0.01; }
                 next.y = newY;
             }
-
             let newX = next.x;
             if (isColliding(newX, next.y, pos.z)) {
-                if (next.x > pos.x) {
-                    while (isColliding(newX, next.y, pos.z)) newX -= 0.01;
-                } else {
-                    while (isColliding(newX, next.y, pos.z)) newX += 0.01;
-                }
+                if (next.x > pos.x) { while (isColliding(newX, next.y, pos.z)) newX -= 0.01; }
+                else { while (isColliding(newX, next.y, pos.z)) newX += 0.01; }
                 next.x = newX;
             }
-
             let newZ = next.z;
             if (isColliding(next.x, next.y, newZ)) {
-                if (next.z > pos.z) {
-                    while (isColliding(next.x, next.y, newZ)) newZ -= 0.01;
-                } else {
-                    while (isColliding(next.x, next.y, newZ)) newZ += 0.01;
-                }
+                if (next.z > pos.z) { while (isColliding(next.x, next.y, newZ)) newZ -= 0.01; }
+                else { while (isColliding(next.x, next.y, newZ)) newZ += 0.01; }
                 next.z = newZ;
             }
-
             return next;
         }
-
         function isGrounded(pos) {
             let y = pos.y - PLAYER_HEIGHT - 0.02;
             let bx = Math.floor(pos.x / BLOCK_SIZE + 0.5);
@@ -437,7 +508,6 @@ Author: Fischy6734
             let bz = Math.floor(pos.z / BLOCK_SIZE + 0.5);
             return blockAt(bx, by, bz);
         }
-
         function createBlock(x, y, z, color = 0x3cba54) {
             const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
             const material = new THREE.MeshStandardMaterial({
@@ -453,7 +523,6 @@ Author: Fischy6734
             blocks.add(block);
             return block;
         }
-
         function setupControls() {
             document.addEventListener('click', () => {
                 if (!controls.isLocked) {
@@ -462,14 +531,12 @@ Author: Fischy6734
                     breakBlock();
                 }
             });
-
             document.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 if (controls.isLocked) {
                     placeBlock();
                 }
             });
-
             document.addEventListener('keydown', (e) => {
                 if (e.code === 'KeyW') moveInput.forward = 1;
                 if (e.code === 'KeyS') moveInput.forward = -1;
@@ -479,28 +546,22 @@ Author: Fischy6734
                     velocity.y = JUMP_FORCE;
                 }
             });
-
             document.addEventListener('keyup', (e) => {
                 if (e.code === 'KeyW' && moveInput.forward === 1) moveInput.forward = 0;
                 if (e.code === 'KeyS' && moveInput.forward === -1) moveInput.forward = 0;
                 if (e.code === 'KeyA' && moveInput.right === -1) moveInput.right = 0;
                 if (e.code === 'KeyD' && moveInput.right === 1) moveInput.right = 0;
             });
-
             let lastTime = performance.now();
             function physicsLoop() {
                 if (controls.isLocked) {
                     const currentTime = performance.now();
                     const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1);
                     lastTime = currentTime;
-
                     const moveDir = new THREE.Vector3();
                     camera.getWorldDirection(moveDir);
-                    moveDir.y = 0;
-                    moveDir.normalize();
-
+                    moveDir.y = 0; moveDir.normalize();
                     const rightDir = new THREE.Vector3(-moveDir.z, 0, moveDir.x);
-                    
                     const speed = WALK_SPEED;
                     const wishDir = new THREE.Vector3();
                     if (moveInput.forward || moveInput.right) {
@@ -509,21 +570,16 @@ Author: Fischy6734
                         wishDir.normalize();
                         wishDir.multiplyScalar(speed * deltaTime);
                     }
-
                     velocity.x = wishDir.x;
                     velocity.z = wishDir.z;
-
                     if (!isOnGround) {
                         velocity.y = Math.max(velocity.y + GRAVITY * deltaTime, TERMINAL_VELOCITY);
                     }
-
                     const pos = camera.position.clone();
                     const next = pos.clone().add(velocity);
                     const moved = collideAndMove(pos, next);
                     camera.position.copy(moved);
-
                     isOnGround = isGrounded(camera.position);
-
                     if (isOnGround) {
                         velocity.y = 0;
                         velocity.x *= FRICTION;
@@ -532,7 +588,6 @@ Author: Fischy6734
                         velocity.x *= AIR_RESISTANCE;
                         velocity.z *= AIR_RESISTANCE;
                     }
-
                     if (camera.position.y < -40) {
                         camera.position.set(0, PLAYER_HEIGHT + 10, 0);
                         velocity.set(0, 0, 0);
@@ -542,7 +597,6 @@ Author: Fischy6734
             }
             requestAnimationFrame(physicsLoop);
         }
-
         function breakBlock() {
             raycaster.setFromCamera(new THREE.Vector2(), camera);
             const intersects = raycaster.intersectObjects(Array.from(blocks));
@@ -556,7 +610,6 @@ Author: Fischy6734
                 removeBlockFromMap(x, y, z);
             }
         }
-
         function placeBlock() {
             raycaster.setFromCamera(new THREE.Vector2(), camera);
             const intersects = raycaster.intersectObjects(Array.from(blocks));
@@ -578,21 +631,17 @@ Author: Fischy6734
                 }
             }
         }
-
         function setupLighting() {
             const ambient = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambient);
-
             const sun = new THREE.DirectionalLight(0xffffff, 0.8);
             sun.position.set(100, 100, 50);
             sun.castShadow = true;
             scene.add(sun);
         }
-
         function animate() {
             requestAnimationFrame(animate);
             updateChunks();
-            
             const time = performance.now();
             if (!window.lastFpsTime) window.lastFpsTime = time, window.frames = 0;
             window.frames++;
@@ -601,41 +650,32 @@ Author: Fischy6734
                 window.frames = 0;
                 window.lastFpsTime = time;
             }
-            
             const pos = camera.position;
-            document.getElementById('pos').textContent = 
+            document.getElementById('pos').textContent =
                 `${Math.round(pos.x)}, ${Math.round(pos.y)}, ${Math.round(pos.z)}`;
-            
             renderer.render(scene, camera);
         }
-
         function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x87CEEB);
-
             camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000);
             camera.position.set(0, PLAYER_HEIGHT + 10, 0);
-
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             document.body.appendChild(renderer.domElement);
-
             controls = new THREE.PointerLockControls(camera, document.body);
             raycaster = new THREE.Raycaster();
-
             setupLighting();
             setupControls();
             generateInitialChunks();
             animate();
         }
-
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
         init();
     </script>
 </body>
