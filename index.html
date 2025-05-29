@@ -48,9 +48,9 @@ Author: Fischy6734
         const BLOCK_SIZE = 1;
         const PLAYER_HEIGHT = 1.8;
         const PLAYER_RADIUS = 0.3;
-        const GRAVITY = -5;
+        const GRAVITY = -3;
         const TERMINAL_VELOCITY = -15;
-        const JUMP_FORCE = 1;
+        const JUMP_FORCE = 0.7;
         const WALK_SPEED = 5;
         const SPRINT_SPEED = 8;
         const FRICTION = 0.6;
@@ -60,15 +60,15 @@ Author: Fischy6734
 
         // --- CHUNK CONFIG ---
         const INITIAL_CHUNKS = 2;
-        const CHUNK_LOAD_DISTANCE = 2;
+        const CHUNK_LOAD_DISTANCE = 10;
         const TREE_CHANCE = 0.04;
         const TREE_MIN_HEIGHT = 4;
         const TREE_MAX_HEIGHT = 6;
         const TREE_SPACING = 6;
 
         // --- HEROBRINE CONFIG ---
-        const HEROBRINE_SPAWN_CHANCE = 0.003; // 0.3% per chunk
-        const HEROBRINE_ACTION_INTERVAL = 7000; // ms
+        const HEROBRINE_SPAWN_CHANCE = 0.3; // 0.3% per chunk
+        const HEROBRINE_ACTION_INTERVAL = 100; // ms
         let herobrine = null;
         let herobrineTimeout = null;
 
