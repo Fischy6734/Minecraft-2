@@ -727,27 +727,27 @@ Author: Fischy6734
             }
         }
 
-        function placeBlock() {
-            raycaster.setFromCamera(new THREE.Vector2(), camera);
-            const intersects = raycaster.intersectObjects(Array.from(blocks));
-            if (intersects.length > 0 && intersects[0].distance < 5) {
-                const point = intersects[0].point;
-                const normal = intersects[0].face.normal;
-                let place = new THREE.Vector3().copy(point)
-                    .add(normal.multiplyScalar(BLOCK_SIZE))
-                    .divideScalar(BLOCK_SIZE)
-                    .floor()
-                    .multiplyScalar(BLOCK_SIZE)
-                    .addScalar(BLOCK_SIZE/2);
-                let x = Math.round(place.x/BLOCK_SIZE);
-                let y = Math.round(place.y/BLOCK_SIZE);
-                let z = Math.round(place.z/BLOCK_SIZE);
-                if (!blockAt(x, y, z) && !isColliding(place.x, place.y, place.z)) {
-                    createBlock(place.x, place.y, place.z);
-                    addBlockToMap(x, y, z);
-                }
-            }
+function placeBlock() {
+    raycaster.setFromCamera(new THREE.Vector2(), camera);
+    const intersects = raycaster.intersectObjects(Array.from(blocks));
+    if (intersects.length > 0 && intersects[0].distance < 5) {
+        const point = intersects[0].point;
+        const normal = intersects[0].face.normal;
+        let place = new THREE.Vector3().copy(point)
+            .add(normal.multiplyScalar(BLOCK_SIZE))
+            .divideScalar(BLOCK_SIZE)
+            .floor()
+            .multiplyScalar(BLOCK_SIZE)
+            .addScalar(BLOCK_SIZE/2);
+        let x = Math.round(place.x/BLOCK_SIZE);
+        let y = Math.round(place.y/BLOCK_SIZE);
+        let z = Math.round(place.z/BLOCK_SIZE);
+        if (!blockAt(x, y, z) && !isColliding(place.x, place.y, place.z)) {
+            createBlock(place.x, place.y, place.z);
+            addBlockToMap(x, y, z);
         }
+    }
+}
 
         function setupLighting() {
             const ambient = new THREE.AmbientLight(0xffffff, 0.6);
