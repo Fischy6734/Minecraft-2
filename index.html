@@ -646,12 +646,12 @@ Author: Fischy6734
                     breakBlock();
                 }
             });
-            document.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                if (controls.isLocked) {
-                    placeBlock();
-                }
-            });
+document.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (controls.isLocked) {
+        placeBlock();
+    }
+});
             document.addEventListener('keydown', (e) => {
                 if (e.code === 'KeyW') moveInput.forward = 1;
                 if (e.code === 'KeyS') moveInput.forward = -1;
