@@ -67,10 +67,13 @@ Author: Fischy6734
         const TREE_SPACING = 6;
 
         // --- HEROBRINE CONFIG ---
-        const HEROBRINE_SPAWN_CHANCE = 0.3; // 0.3% per chunk
-        const HEROBRINE_ACTION_INTERVAL = 100; // ms
+        const HEROBRINE_SPAWN_CHANCE = 0.003;
+        const HEROBRINE_ACTION_INTERVAL = 6000;
         let herobrine = null;
         let herobrineTimeout = null;
+        let herobrineTarget = null;
+        let herobrineActive = false;
+        let shrineBlocks = new Set();
 
         // --- GAME STATE ---
         let scene, camera, renderer, controls, raycaster;
@@ -84,24 +87,20 @@ Author: Fischy6734
 
         // --- HEROBRINE CODE ---
 
-        // Herobrine Model (Steve with white eyes)
         function createHerobrineMesh() {
             const group = new THREE.Group();
-
             // Body
             const bodyGeo = new THREE.BoxGeometry(0.6, 1, 0.4);
             const bodyMat = new THREE.MeshStandardMaterial({ color: 0x7851a9 });
             const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.position.set(0, 0.5, 0);
             group.add(body);
-
             // Head
             const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
             const headMat = new THREE.MeshStandardMaterial({ color: 0xe1a16d });
             const head = new THREE.Mesh(headGeo, headMat);
             head.position.set(0, 1.1, 0);
             group.add(head);
-
             // Eyes
             const eyeGeo = new THREE.BoxGeometry(0.12, 0.08, 0.01);
             const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff });
@@ -110,7 +109,6 @@ Author: Fischy6734
             const eyeRight = new THREE.Mesh(eyeGeo, eyeMat);
             eyeRight.position.set(0.13, 1.15, 0.31);
             group.add(eyeLeft); group.add(eyeRight);
-
             // Arms
             const armGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
             const armMat = new THREE.MeshStandardMaterial({ color: 0x3cba54 });
@@ -119,7 +117,6 @@ Author: Fischy6734
             const armRight = new THREE.Mesh(armGeo, armMat);
             armRight.position.set(0.45, 0.7, 0);
             group.add(armLeft); group.add(armRight);
-
             // Legs
             const legGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
             const legMat = new THREE.MeshStandardMaterial({ color: 0x2222ff });
@@ -135,35 +132,34 @@ Author: Fischy6734
             return group;
         }
 
-        function spawnHerobrine(validSpots) {
-            if (herobrine) return;
+        function spawnHerobrine(validSpots, vanishFirst = false) {
+            if (herobrine && vanishFirst) {
+                scene.remove(herobrine);
+                herobrine = null;
+            }
             if (!validSpots.length) return;
-
-            // Pick a random valid spot
             const idx = Math.floor(Math.random() * validSpots.length);
             const { x, y, z } = validSpots[idx];
-
             herobrine = createHerobrineMesh();
             herobrine.position.set(x * BLOCK_SIZE, y * BLOCK_SIZE + 0.9, z * BLOCK_SIZE);
             scene.add(herobrine);
-
+            herobrineActive = true;
             hauntWorld();
         }
 
-        // Find valid spawn spots (on ground, on tree, in sky)
         function findHerobrineSpots(chunkX, chunkZ) {
             const spots = [];
             // On top of trees
             for (let [key, tree] of treePositions) {
                 const [tx, tz] = key.split(',').map(Number);
-                if (Math.abs(tx - chunkX) < CHUNK_SIZE*2 && Math.abs(tz - chunkZ) < CHUNK_SIZE*2) {
+                if (Math.abs(tx - chunkX) < CHUNK_SIZE * 2 && Math.abs(tz - chunkZ) < CHUNK_SIZE * 2) {
                     spots.push({ x: tx, y: tree.height + 2, z: tz });
                 }
             }
             // In sky above random block in chunk
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 for (let z = 0; z < CHUNK_SIZE; z++) {
-                    spots.push({ x: chunkX * CHUNK_SIZE + x, y: 14 + Math.floor(Math.random()*10), z: chunkZ * CHUNK_SIZE + z });
+                    spots.push({ x: chunkX * CHUNK_SIZE + x, y: 14 + Math.floor(Math.random() * 10), z: chunkZ * CHUNK_SIZE + z });
                 }
             }
             // On the ground
@@ -178,26 +174,25 @@ Author: Fischy6734
             return spots;
         }
 
-        // Herobrine haunting actions
         function hauntWorld() {
             if (!herobrine) return;
             const action = Math.random();
-            if (action < 0.33) {
-                // Dig a cave
-                const pos = herobrine.position;
+            const playerPos = camera.position.clone();
+            // 1. Dig a cave
+            if (action < 0.18) {
                 for (let i = 0; i < 7; i++) {
                     for (let j = 0; j < 3; j++) {
                         for (let k = 0; k < 7; k++) {
-                            let bx = Math.round(pos.x/BLOCK_SIZE) + i-3;
-                            let by = Math.round(pos.y/BLOCK_SIZE) - j-3;
-                            let bz = Math.round(pos.z/BLOCK_SIZE) + k-3;
+                            let bx = Math.round(herobrine.position.x / BLOCK_SIZE) + i - 3;
+                            let by = Math.round(herobrine.position.y / BLOCK_SIZE) - j - 3;
+                            let bz = Math.round(herobrine.position.z / BLOCK_SIZE) + k - 3;
                             if (by > 0 && Math.random() < 0.6) {
                                 removeBlockFromMap(bx, by, bz);
                                 for (let block of blocks) {
                                     if (
-                                        Math.round(block.position.x/BLOCK_SIZE) === bx &&
-                                        Math.round(block.position.y/BLOCK_SIZE) === by &&
-                                        Math.round(block.position.z/BLOCK_SIZE) === bz
+                                        Math.round(block.position.x / BLOCK_SIZE) === bx &&
+                                        Math.round(block.position.y / BLOCK_SIZE) === by &&
+                                        Math.round(block.position.z / BLOCK_SIZE) === bz
                                     ) {
                                         scene.remove(block);
                                         blocks.delete(block);
@@ -207,36 +202,122 @@ Author: Fischy6734
                         }
                     }
                 }
-            } else if (action < 0.66) {
-                // Remove leaves from nearby trees
+                herobrineFlash();
+
+            // 2. Remove leaves from trees
+            } else if (action < 0.36) {
                 for (let block of blocks) {
                     if (block.material.color.getHex() === 0x2d5a27) {
                         if (herobrine.position.distanceTo(block.position) < 6 && Math.random() < 0.5) {
-                            let x = Math.round(block.position.x/BLOCK_SIZE);
-                            let y = Math.round(block.position.y/BLOCK_SIZE);
-                            let z = Math.round(block.position.z/BLOCK_SIZE);
+                            let x = Math.round(block.position.x / BLOCK_SIZE);
+                            let y = Math.round(block.position.y / BLOCK_SIZE);
+                            let z = Math.round(block.position.z / BLOCK_SIZE);
                             removeBlockFromMap(x, y, z);
                             scene.remove(block);
                             blocks.delete(block);
                         }
                     }
                 }
-            } else {
-                // Change color of some blocks nearby
+                herobrineFlash();
+
+            // 3. Change color of some blocks nearby
+            } else if (action < 0.54) {
                 for (let block of blocks) {
                     if (herobrine.position.distanceTo(block.position) < 6 && Math.random() < 0.2) {
                         block.material.color.setHex(Math.random() * 0xffffff);
                     }
                 }
+                herobrineFlash();
+
+            // 4. Build a "shrine" (obsidian 3x3 and torch in center)
+            } else if (action < 0.68) {
+                let px = Math.round(herobrine.position.x / BLOCK_SIZE);
+                let py = Math.round(herobrine.position.y / BLOCK_SIZE) - 1;
+                let pz = Math.round(herobrine.position.z / BLOCK_SIZE);
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dz = -1; dz <= 1; dz++) {
+                        let block = createBlock((px + dx) * BLOCK_SIZE, py * BLOCK_SIZE, (pz + dz) * BLOCK_SIZE, 0x14141a);
+                        shrineBlocks.add(block);
+                        blocks.add(block);
+                        addBlockToMap(px + dx, py, pz + dz);
+                    }
+                }
+                // Torch (yellow block) in middle
+                let torch = createBlock(px * BLOCK_SIZE, (py + 1) * BLOCK_SIZE, pz * BLOCK_SIZE, 0xffff44);
+                shrineBlocks.add(torch);
+                blocks.add(torch);
+                addBlockToMap(px, py + 1, pz);
+                herobrineFlash();
+
+            // 5. Teleport and spooky effect
+            } else if (action < 0.82) {
+                herobrine.position.x += (Math.random() - 0.5) * 12;
+                herobrine.position.z += (Math.random() - 0.5) * 12;
+                herobrine.position.y += (Math.random() - 0.5) * 6;
+                herobrineFlash();
+
+            // 6. Stalk player
+            } else if (action < 0.95) {
+                // Only move closer if not too close
+                let dist = herobrine.position.distanceTo(playerPos);
+                if (dist > 8) {
+                    let dir = playerPos.clone().sub(herobrine.position).normalize().multiplyScalar(4 + Math.random() * 5);
+                    herobrine.position.add(dir);
+                    herobrine.position.y = Math.max(herobrine.position.y, 1);
+                }
+                herobrineFlash();
+
+            // 7. Vanish and respawn
+            } else {
+                scene.remove(herobrine);
+                herobrine = null;
+                herobrineActive = false;
+                setTimeout(() => {
+                    // Find new spot
+                    let playerChunkX = Math.floor(camera.position.x / (CHUNK_SIZE * BLOCK_SIZE));
+                    let playerChunkZ = Math.floor(camera.position.z / (CHUNK_SIZE * BLOCK_SIZE));
+                    let spots = findHerobrineSpots(playerChunkX, playerChunkZ);
+                    spawnHerobrine(spots, true);
+                }, 2000 + Math.random() * 4000);
+                herobrineFlash();
+                return; // Don't schedule next action yet, will on respawn
             }
-            // Occasionally teleport Herobrine
-            if (Math.random() < 0.3) {
-                herobrine.position.x += (Math.random()-0.5)*16;
-                herobrine.position.z += (Math.random()-0.5)*16;
-                herobrine.position.y += (Math.random()-0.5)*8;
+
+            // Subtle "haunt" visual/sound
+            subtleHaunt();
+
+            herobrineTimeout = setTimeout(hauntWorld, HEROBRINE_ACTION_INTERVAL + Math.random() * 3000);
+        }
+
+        // Subtle haunt: flash, red tint, spooky sound
+        function herobrineFlash() {
+            const flash = document.getElementById('herobrine-flash');
+            flash.style.display = "block";
+            setTimeout(() => { flash.style.display = "none"; }, 200 + Math.random() * 200);
+            if (window.AudioContext && !window._hb_audio) {
+                window._hb_audio = new (window.AudioContext || window.webkitAudioContext)();
             }
-            // Repeat
-            herobrineTimeout = setTimeout(hauntWorld, HEROBRINE_ACTION_INTERVAL);
+            if (window._hb_audio) {
+                // Spooky beep (quick)
+                let ctx = window._hb_audio;
+                let o = ctx.createOscillator();
+                let g = ctx.createGain();
+                o.type = "triangle";
+                o.frequency.value = 200 + Math.random() * 120;
+                g.gain.value = 0.08;
+                o.connect(g).connect(ctx.destination);
+                o.start();
+                o.stop(ctx.currentTime + 0.2 + Math.random() * 0.1);
+            }
+        }
+        function subtleHaunt() {
+            // Optional: small screen tint or quick shake
+            if (Math.random() < 0.35) {
+                let flash = document.getElementById('herobrine-flash');
+                flash.style.background = "rgba(255,0,0,0.14)";
+                flash.style.display = "block";
+                setTimeout(() => { flash.style.display = "none"; flash.style.background = "rgba(255,0,0,0.25)"; }, 120 + Math.random() * 200);
+            }
         }
 
         // --- TREE GENERATION ---
@@ -361,7 +442,6 @@ Author: Fischy6734
             }
         }
         const chunks = new Map();
-
         function generateInitialChunks() {
             for (let x = 0; x < INITIAL_CHUNKS; x++) {
                 for (let z = 0; z < INITIAL_CHUNKS; z++) {
