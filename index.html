@@ -1,36 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <!--
-Date: 2025-05-29 14:58:24
+Date: 2025-05-30 19:15:43
 Author: Fischy6734
 -->
 <head>
     <meta charset="UTF-8">
-    <title>Minecraft Clone - Herobrine Update</title>
+    <title>Minecraft Clone - Hotbar & Block Placing</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; }
         #crosshair {
-            position: fixed;
-            left: 50%;
-            top: 50%;
+            position: fixed; left: 50%; top: 50%;
             transform: translate(-50%, -50%);
-            width: 20px; height: 20px;
-            pointer-events: none; z-index: 100;
+            width: 20px; height: 20px; pointer-events: none; z-index: 100;
         }
         #crosshair::before, #crosshair::after {
-            content: '';
-            position: absolute;
-            background: white;
+            content: ''; position: absolute; background: white;
             box-shadow: 0 0 2px black;
         }
         #crosshair::before { width: 2px; height: 20px; left: 9px; }
-        #crosshair::after  { width: 20px; height: 2px; top: 9px; }
+        #crosshair::after { width: 20px; height: 2px; top: 9px; }
         #hud {
             position: fixed; top: 10px; left: 10px;
             color: white; font-family: monospace;
             text-shadow: 2px 2px black; z-index: 100;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px; border-radius: 5px;
+            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+        }
+        #herobrine-flash {
+            display: none;
+            position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(255,0,0,0.25); z-index: 999;
+            pointer-events: none;
+        }
+        #hotbar {
+            position: fixed;
+            left: 50%; bottom: 30px; transform: translateX(-50%);
+            display: flex; gap: 6px; z-index: 200;
+            background: rgba(0,0,0,0.2); padding: 8px 10px; border-radius: 7px;
+            user-select: none;
+        }
+        .hotbar-slot {
+            width: 44px; height: 44px; border: 2px solid #fff4;
+            border-radius: 5px; background: #222c;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 8px #000c;
+            font-size: 26px;
+            position: relative;
+            cursor: pointer;
+            transition: border 0.15s;
+        }
+        .hotbar-slot.selected {
+            border: 2.5px solid #fff;
+            background: #444c;
+            box-shadow: 0 0 10px #fff8, 0 2px 8px #000c;
+        }
+        .hotbar-slot .slot-label {
+            position: absolute; left: 2px; bottom: 2px;
+            font-size: 11px; color: #fff9;
+            text-shadow: 1px 1px 3px #000b;
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -43,37 +70,72 @@ Author: Fischy6734
         <div>Position: <span id="pos">0, 0, 0</span></div>
         <div>Chunks: <span id="chunks">0</span></div>
     </div>
+    <div id="herobrine-flash"></div>
+    <div id="hotbar"></div>
     <script>
-        // --- IMPROVED PHYSICS CONFIG ---
-        const BLOCK_SIZE = 1;
-        const PLAYER_HEIGHT = 1.8;
-        const PLAYER_RADIUS = 0.3;
-        const GRAVITY = -3;
-        const TERMINAL_VELOCITY = -15;
-        const JUMP_FORCE = 0.7;
-        const WALK_SPEED = 5;
-        const SPRINT_SPEED = 8;
-        const FRICTION = 0.6;
-        const AIR_RESISTANCE = 1;
-        const WORLD_SIZE = 32;
+        // --- GAME CONFIG ---
+        const BLOCK_SIZE = 1; 
+        const PLAYER_HEIGHT = 1.8; 
+        const PLAYER_RADIUS = 0.3; 
+        const GRAVITY = -3; 
+        const TERMINAL_VELOCITY = -15; 
+        const JUMP_FORCE = 0.7; 
+        const WALK_SPEED = 5; 
+        const SPRINT_SPEED = 8; 
+        const FRICTION = 0.6; 
+        const AIR_RESISTANCE = 1; 
+        const WORLD_SIZE = 32; 
         const CHUNK_SIZE = 1;
-
-        // --- CHUNK CONFIG ---
         const INITIAL_CHUNKS = 2;
         const CHUNK_LOAD_DISTANCE = 10;
-        const TREE_CHANCE = 0.04;
+        const TREE_CHANCE = 0.05;
         const TREE_MIN_HEIGHT = 4;
         const TREE_MAX_HEIGHT = 6;
-        const TREE_SPACING = 6;
-
-        // --- HEROBRINE CONFIG ---
+        const TREE_SPACING = 4;
         const HEROBRINE_SPAWN_CHANCE = 0.003;
         const HEROBRINE_ACTION_INTERVAL = 6000;
-        let herobrine = null;
-        let herobrineTimeout = null;
-        let herobrineTarget = null;
-        let herobrineActive = false;
-        let shrineBlocks = new Set();
+
+        // --- HOTBAR CODE ---
+        const BLOCK_TYPES = [
+            { name: "Grass", color: 0x3cba54, emoji:"🌱" },
+            { name: "Dirt",  color: 0x8B4513, emoji:"🟫" },
+            { name: "Stone", color: 0x808080, emoji:"⬜" },
+            { name: "Obsidian", color: 0x14141a, emoji:"⬛" },
+            { name: "Leaves", color: 0x2d5a27, emoji:"🍃" },
+            { name: "Shrine", color: 0x14141a, emoji:"🔲" },
+            { name: "Torch", color: 0xffff44, emoji:"🔥" }
+        ];
+        let selectedBlock = 0;
+
+        function renderHotbar() {
+            const bar = document.getElementById('hotbar');
+            bar.innerHTML = '';
+            BLOCK_TYPES.forEach((bt, idx) => {
+                const slot = document.createElement('div');
+                slot.className = 'hotbar-slot' + (idx === selectedBlock ? ' selected':'');
+                slot.innerHTML = `<span>${bt.emoji}</span><span class="slot-label">${idx+1}</span>`;
+                slot.title = bt.name;
+                slot.onclick = () => { selectedBlock = idx; renderHotbar(); };
+                bar.appendChild(slot);
+            });
+        }
+        renderHotbar();
+
+        document.addEventListener('wheel', (e) => {
+            if (!controls || !controls.isLocked) return;
+            if (e.deltaY > 0) selectedBlock = (selectedBlock + 1) % BLOCK_TYPES.length;
+            else if (e.deltaY < 0) selectedBlock = (selectedBlock + BLOCK_TYPES.length - 1) % BLOCK_TYPES.length;
+            renderHotbar();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.code.startsWith('Digit')) {
+                const idx = parseInt(e.code.slice(5)) - 1;
+                if (idx >= 0 && idx < BLOCK_TYPES.length) {
+                    selectedBlock = idx;
+                    renderHotbar();
+                }
+            }
+        });
 
         // --- GAME STATE ---
         let scene, camera, renderer, controls, raycaster;
@@ -84,24 +146,25 @@ Author: Fischy6734
         let blockMap = new Set();
         let chunksLoaded = new Set();
         const treePositions = new Map();
+        let herobrine = null;
+        let herobrineTimeout = null;
+        let herobrineTarget = null;
+        let herobrineActive = false;
+        let shrineBlocks = new Set();
 
         // --- HEROBRINE CODE ---
-
         function createHerobrineMesh() {
             const group = new THREE.Group();
-            // Body
             const bodyGeo = new THREE.BoxGeometry(0.6, 1, 0.4);
             const bodyMat = new THREE.MeshStandardMaterial({ color: 0x7851a9 });
             const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.position.set(0, 0.5, 0);
             group.add(body);
-            // Head
             const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
             const headMat = new THREE.MeshStandardMaterial({ color: 0xe1a16d });
             const head = new THREE.Mesh(headGeo, headMat);
             head.position.set(0, 1.1, 0);
             group.add(head);
-            // Eyes
             const eyeGeo = new THREE.BoxGeometry(0.12, 0.08, 0.01);
             const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff });
             const eyeLeft = new THREE.Mesh(eyeGeo, eyeMat);
@@ -109,7 +172,6 @@ Author: Fischy6734
             const eyeRight = new THREE.Mesh(eyeGeo, eyeMat);
             eyeRight.position.set(0.13, 1.15, 0.31);
             group.add(eyeLeft); group.add(eyeRight);
-            // Arms
             const armGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
             const armMat = new THREE.MeshStandardMaterial({ color: 0x3cba54 });
             const armLeft = new THREE.Mesh(armGeo, armMat);
@@ -117,7 +179,6 @@ Author: Fischy6734
             const armRight = new THREE.Mesh(armGeo, armMat);
             armRight.position.set(0.45, 0.7, 0);
             group.add(armLeft); group.add(armRight);
-            // Legs
             const legGeo = new THREE.BoxGeometry(0.2, 0.8, 0.2);
             const legMat = new THREE.MeshStandardMaterial({ color: 0x2222ff });
             const legLeft = new THREE.Mesh(legGeo, legMat);
@@ -131,7 +192,6 @@ Author: Fischy6734
             group.userData.isHerobrine = true;
             return group;
         }
-
         function spawnHerobrine(validSpots, vanishFirst = false) {
             if (herobrine && vanishFirst) {
                 scene.remove(herobrine);
@@ -146,23 +206,19 @@ Author: Fischy6734
             herobrineActive = true;
             hauntWorld();
         }
-
         function findHerobrineSpots(chunkX, chunkZ) {
             const spots = [];
-            // On top of trees
             for (let [key, tree] of treePositions) {
                 const [tx, tz] = key.split(',').map(Number);
                 if (Math.abs(tx - chunkX) < CHUNK_SIZE * 2 && Math.abs(tz - chunkZ) < CHUNK_SIZE * 2) {
                     spots.push({ x: tx, y: tree.height + 2, z: tz });
                 }
             }
-            // In sky above random block in chunk
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 for (let z = 0; z < CHUNK_SIZE; z++) {
                     spots.push({ x: chunkX * CHUNK_SIZE + x, y: 14 + Math.floor(Math.random() * 10), z: chunkZ * CHUNK_SIZE + z });
                 }
             }
-            // On the ground
             for (let x = 0; x < CHUNK_SIZE; x++) {
                 for (let z = 0; z < CHUNK_SIZE; z++) {
                     let wx = chunkX * CHUNK_SIZE + x;
@@ -173,12 +229,10 @@ Author: Fischy6734
             }
             return spots;
         }
-
         function hauntWorld() {
             if (!herobrine) return;
             const action = Math.random();
             const playerPos = camera.position.clone();
-            // 1. Dig a cave
             if (action < 0.18) {
                 for (let i = 0; i < 7; i++) {
                     for (let j = 0; j < 3; j++) {
@@ -203,8 +257,6 @@ Author: Fischy6734
                     }
                 }
                 herobrineFlash();
-
-            // 2. Remove leaves from trees
             } else if (action < 0.36) {
                 for (let block of blocks) {
                     if (block.material.color.getHex() === 0x2d5a27) {
@@ -219,8 +271,6 @@ Author: Fischy6734
                     }
                 }
                 herobrineFlash();
-
-            // 3. Change color of some blocks nearby
             } else if (action < 0.54) {
                 for (let block of blocks) {
                     if (herobrine.position.distanceTo(block.position) < 6 && Math.random() < 0.2) {
@@ -228,8 +278,6 @@ Author: Fischy6734
                     }
                 }
                 herobrineFlash();
-
-            // 4. Build a "shrine" (obsidian 3x3 and torch in center)
             } else if (action < 0.68) {
                 let px = Math.round(herobrine.position.x / BLOCK_SIZE);
                 let py = Math.round(herobrine.position.y / BLOCK_SIZE) - 1;
@@ -242,23 +290,17 @@ Author: Fischy6734
                         addBlockToMap(px + dx, py, pz + dz);
                     }
                 }
-                // Torch (yellow block) in middle
                 let torch = createBlock(px * BLOCK_SIZE, (py + 1) * BLOCK_SIZE, pz * BLOCK_SIZE, 0xffff44);
                 shrineBlocks.add(torch);
                 blocks.add(torch);
                 addBlockToMap(px, py + 1, pz);
                 herobrineFlash();
-
-            // 5. Teleport and spooky effect
             } else if (action < 0.82) {
                 herobrine.position.x += (Math.random() - 0.5) * 12;
                 herobrine.position.z += (Math.random() - 0.5) * 12;
                 herobrine.position.y += (Math.random() - 0.5) * 6;
                 herobrineFlash();
-
-            // 6. Stalk player
             } else if (action < 0.95) {
-                // Only move closer if not too close
                 let dist = herobrine.position.distanceTo(playerPos);
                 if (dist > 8) {
                     let dir = playerPos.clone().sub(herobrine.position).normalize().multiplyScalar(4 + Math.random() * 5);
@@ -266,30 +308,22 @@ Author: Fischy6734
                     herobrine.position.y = Math.max(herobrine.position.y, 1);
                 }
                 herobrineFlash();
-
-            // 7. Vanish and respawn
             } else {
                 scene.remove(herobrine);
                 herobrine = null;
                 herobrineActive = false;
                 setTimeout(() => {
-                    // Find new spot
                     let playerChunkX = Math.floor(camera.position.x / (CHUNK_SIZE * BLOCK_SIZE));
                     let playerChunkZ = Math.floor(camera.position.z / (CHUNK_SIZE * BLOCK_SIZE));
                     let spots = findHerobrineSpots(playerChunkX, playerChunkZ);
                     spawnHerobrine(spots, true);
                 }, 2000 + Math.random() * 4000);
                 herobrineFlash();
-                return; // Don't schedule next action yet, will on respawn
+                return;
             }
-
-            // Subtle "haunt" visual/sound
             subtleHaunt();
-
             herobrineTimeout = setTimeout(hauntWorld, HEROBRINE_ACTION_INTERVAL + Math.random() * 3000);
         }
-
-        // Subtle haunt: flash, red tint, spooky sound
         function herobrineFlash() {
             const flash = document.getElementById('herobrine-flash');
             flash.style.display = "block";
@@ -298,7 +332,6 @@ Author: Fischy6734
                 window._hb_audio = new (window.AudioContext || window.webkitAudioContext)();
             }
             if (window._hb_audio) {
-                // Spooky beep (quick)
                 let ctx = window._hb_audio;
                 let o = ctx.createOscillator();
                 let g = ctx.createGain();
@@ -311,7 +344,6 @@ Author: Fischy6734
             }
         }
         function subtleHaunt() {
-            // Optional: small screen tint or quick shake
             if (Math.random() < 0.35) {
                 let flash = document.getElementById('herobrine-flash');
                 flash.style.background = "rgba(255,0,0,0.14)";
@@ -406,7 +438,6 @@ Author: Fischy6734
                             }
                         }
                     }
-                    // --- HEROBRINE: Try to spawn when chunk is generated ---
                     if (Math.random() < HEROBRINE_SPAWN_CHANCE && !herobrine) {
                         const spots = findHerobrineSpots(this.x, this.z);
                         spawnHerobrine(spots);
@@ -548,7 +579,6 @@ Author: Fischy6734
         function addBlockToMap(x, y, z) { blockMap.add(blockKey(x, y, z)); }
         function removeBlockFromMap(x, y, z) { blockMap.delete(blockKey(x, y, z)); }
         function blockAt(x, y, z) { return blockMap.has(blockKey(x, y, z)); }
-
         function isColliding(px, py, pz) {
             let y0 = py - PLAYER_HEIGHT + 0.001;
             let y1 = py - 0.001;
@@ -588,10 +618,14 @@ Author: Fischy6734
             let bz = Math.floor(pos.z / BLOCK_SIZE + 0.5);
             return blockAt(bx, by, bz);
         }
-        function createBlock(x, y, z, color = 0x3cba54) {
+
+        // --- HOTBAR-AWARE createBlock ---
+        function createBlock(x, y, z, color) {
+            let useColor = color;
+            if (color === undefined) { useColor = BLOCK_TYPES[selectedBlock].color; }
             const geometry = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
             const material = new THREE.MeshStandardMaterial({
-                color: color,
+                color: useColor,
                 roughness: 0.8
             });
             const block = new THREE.Mesh(geometry, material);
@@ -603,6 +637,7 @@ Author: Fischy6734
             blocks.add(block);
             return block;
         }
+
         function setupControls() {
             document.addEventListener('click', () => {
                 if (!controls.isLocked) {
@@ -677,6 +712,7 @@ Author: Fischy6734
             }
             requestAnimationFrame(physicsLoop);
         }
+
         function breakBlock() {
             raycaster.setFromCamera(new THREE.Vector2(), camera);
             const intersects = raycaster.intersectObjects(Array.from(blocks));
@@ -690,6 +726,7 @@ Author: Fischy6734
                 removeBlockFromMap(x, y, z);
             }
         }
+
         function placeBlock() {
             raycaster.setFromCamera(new THREE.Vector2(), camera);
             const intersects = raycaster.intersectObjects(Array.from(blocks));
@@ -711,6 +748,7 @@ Author: Fischy6734
                 }
             }
         }
+
         function setupLighting() {
             const ambient = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambient);
